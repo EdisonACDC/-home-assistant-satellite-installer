@@ -1,7 +1,7 @@
 name: Satellite Installer Pro
-version: "0.1.0"
+version: "0.2.0"
 slug: satellite_installer_pro
-description: Calcolo, configurazione e puntamento professionale di impianti satellitari
+description: Calcolo, configurazione, cablaggio e puntamento professionale di impianti satellitari
 url: https://github.com/EdisonACDC/-home-assistant-satellite-installer
 arch:
   - amd64
