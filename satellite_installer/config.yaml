@@ -1,7 +1,7 @@
 name: Satellite Installer Pro
-version: "0.5.0"
+version: "0.6.0"
 slug: satellite_installer_pro
-description: Calcolo, configurazione, puntamento e progettazione professionale di impianti satellitari con Amiko X-Finder 3, profili Wideband e più transponder selezionabili inclusi tivùsat
+description: Calcolo, configurazione, puntamento e progettazione professionale di impianti satellitari con Amiko X-Finder 3, profili Wideband, più transponder e montaggio multifeed fronte/retro
 url: https://github.com/EdisonACDC/-home-assistant-satellite-installer
 arch:
   - amd64
