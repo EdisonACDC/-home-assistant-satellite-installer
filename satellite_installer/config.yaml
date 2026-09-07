@@ -1,7 +1,7 @@
 name: Satellite Installer Pro
-version: "0.4.0"
+version: "0.4.1"
 slug: satellite_installer_pro
-description: Calcolo, configurazione, puntamento e progettazione professionale di impianti satellitari con configurazione misuratore di campo
+description: Calcolo, configurazione, puntamento e progettazione professionale di impianti satellitari con configurazione Amiko X-Finder 3
 url: https://github.com/EdisonACDC/-home-assistant-satellite-installer
 arch:
   - amd64
