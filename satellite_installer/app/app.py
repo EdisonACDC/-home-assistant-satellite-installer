@@ -46,27 +46,28 @@ def build_layout(system,receivers,sat_count):
     return components,wiring
 
 def meter_settings(sat, system, diseqc_port=1):
-    freq=sat["freq"]; pol=sat["pol"]
-    high=freq>=11700
+    freq=sat["freq"]; pol=sat["pol"]; high=freq>=11700
     voltage="18 V" if pol=="H" else "13 V"
-    tone="ON" if high else "OFF"
-    lof="9750 / 10600 MHz"
-    if high: ifreq=freq-10600
-    else: ifreq=freq-9750
+    tone="AUTO (gestito da Universal)" if True else ("ON" if high else "OFF")
+    ifreq=freq-(10600 if high else 9750)
     settings={
-        "meter":"Amiko X-Finder 3 / Multibox 3",
-        "lnb_type":"Universal 9750/10600",
+        "meter":"Amiko X-Finder 3",
+        "lnb_type":"Universal (9750-10600)",
         "frequency_mhz":freq,"polarization":pol,"symbol_rate":sat["sr"],"fec":sat["fec"],"dvb":sat["system"],
-        "lnb_voltage":voltage,"tone_22khz":tone,"band":"Alta" if high else "Bassa","lof":lof,"if_mhz":ifreq,
-        "diseqc":"OFF" if system in ("single","twin","quad","octo") and diseqc_port==1 else f"DiSEqC 1.0 Porta {diseqc_port}",
-        "scr":"OFF","steps":[]
+        "lnb_voltage":voltage,"tone_22khz":tone,"band":"Alta" if high else "Bassa","lof":"9750 / 10600 MHz","if_mhz":ifreq,
+        "diseqc":"Disable" if diseqc_port==1 else f"DiSEqC 1.0: {diseqc_port}/4",
+        "scr":"OFF","supported":True,"warning":"","steps":[]
     }
-    if system=="unicable": settings["scr"]="EN50494 / SCR: selezionare User Band assegnata"; settings["diseqc"]="Secondo impianto"
-    if system=="jess": settings["scr"]="EN50607 / JESS/dCSS: selezionare User Band assegnata"; settings["diseqc"]="Secondo impianto"
-    if system=="quattro": settings["lnb_type"]="Universal/Quattro lato misura; collegarsi alla linea coerente con banda/polarizzazione"
-    if system=="wideband": settings["lnb_type"]="Wideband: usare profilo Wideband del misuratore se disponibile"; settings["tone_22khz"]="Non usato come selezione banda sul Wideband"
-    settings["steps"]=[
-        f"Seleziona satellite: {sat['name']}",f"Imposta LNB: {settings['lnb_type']}",f"Imposta frequenza {freq} MHz, {pol}, SR {sat['sr']}, FEC {sat['fec']}",f"Imposta alimentazione LNB {voltage}",f"22 kHz: {settings['tone_22khz']}",f"DiSEqC: {settings['diseqc']}","Avvia la misura e cerca LOCK; poi massimizza MER/QUALITÀ, non solo il livello."]
+    if system=="unicable":
+        settings["lnb_type"]="Unicable"; settings["scr"]="Unicable: selezionare la User Band assegnata"; settings["tone_22khz"]="Gestito dal modo Unicable"
+    elif system=="jess":
+        settings["lnb_type"]="Unicable (solo se compatibile con il profilo/UB del tuo impianto)"; settings["scr"]="Il manuale X-Finder 3 documenta Unicable; EN50607/JESS non è indicato come voce separata"; settings["warning"]="Per dCSS/JESS verifica che la User Band e il comando siano compatibili con il firmware del tuo X-Finder 3."
+    elif system=="quattro":
+        settings["lnb_type"]="Universal / Standard / User secondo il punto di misura"; settings["warning"]="Su LNB Quattro misura la singola uscita VL/VH/HL/HH coerente con polarizzazione e banda; non usare una voce 'Quattro' se non presente nel menu."
+    elif system=="wideband":
+        settings["lnb_type"]="NON disponibile come profilo Wideband nello X-Finder 3"; settings["supported"]=False; settings["warning"]="Lo X-Finder 3 non documenta un tipo LNB Wideband. Per impianti Wideband misura preferibilmente a valle di un multiswitch su un'uscita legacy/universale compatibile. Non impostare un profilo Wideband inesistente."
+        settings["tone_22khz"]="N/D per misura diretta Wideband"; settings["lnb_voltage"]="Secondo uscita/multiswitch"; settings["if_mhz"]="N/D"
+    settings["steps"]=[f"MENU → Installazione / Satellite → seleziona {sat['name']}",f"LNB Type: {settings['lnb_type']}",f"TP Index: imposta o crea {freq} MHz, {pol}, SR {sat['sr']}",f"LNB Power: {settings['lnb_voltage']}",f"22K: {settings['tone_22khz']}",f"DiSEqC 1.0: {settings['diseqc']}","Apri la misura del TP e verifica LOCK, livello, qualità/MER e BER."]
     return settings
 
 @app.route("/")
@@ -77,7 +78,7 @@ def geocode():
     d=request.get_json(force=True); city=(d.get("city") or "").strip()
     if not city:return jsonify({"error":"Inserisci il nome della città"}),400
     try:
-        params=urlencode({"q":city,"format":"jsonv2","limit":5,"addressdetails":1}); req=Request("https://nominatim.openstreetmap.org/search?"+params,headers={"User-Agent":"SatelliteInstallerPro/0.4.0 (Home Assistant add-on)"})
+        params=urlencode({"q":city,"format":"jsonv2","limit":5,"addressdetails":1}); req=Request("https://nominatim.openstreetmap.org/search?"+params,headers={"User-Agent":"SatelliteInstallerPro/0.4.1 (Home Assistant add-on)"})
         with urlopen(req,timeout=8) as r:data=json.loads(r.read().decode("utf-8"))
         return jsonify({"results":[{"name":x.get("display_name",city),"lat":float(x["lat"]),"lon":float(x["lon"])} for x in data[:5]]})
     except Exception as e:return jsonify({"error":"Ricerca città non disponibile. Puoi inserire manualmente latitudine e longitudine.","detail":str(e)}),502
@@ -96,6 +97,7 @@ def calc():
     if len(satellite_ids)>4:warnings.append("Per più di 4 satelliti valuta multiswitch in cascata o DiSEqC avanzato.")
     if any(x["elevation"]<=0 for x in results):warnings.append("Almeno un satellite risulta sotto l'orizzonte.")
     if receivers>8 and system in ("single","twin","quad","octo"):warnings.append("Con più di 8 tuner è consigliato Quattro/Wideband o dCSS.")
+    if system=="wideband":warnings.append("Amiko X-Finder 3: nessun profilo LNB Wideband documentato. Misura consigliata a valle del multiswitch su uscita legacy compatibile.")
     return jsonify({"location":{"lat":lat,"lon":lon},"satellites":results,"dish_min_cm":dish,"system_key":system,"system":SYSTEMS[system],"components":components,"wiring":wiring,"warnings":warnings})
 
 app.run(host="0.0.0.0",port=8099)
