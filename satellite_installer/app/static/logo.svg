@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Satellite Installer Pro</title>
+  <desc id="desc">Logo con parabola satellitare, onde radio e mirino di puntamento.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#071a33"/>
+      <stop offset="1" stop-color="#0a3f67"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#12e7ff"/>
+      <stop offset="1" stop-color="#00a8e8"/>
+    </linearGradient>
+    <linearGradient id="dish" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c8d7e8"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="232" r="188" fill="url(#bg)" stroke="url(#cyan)" stroke-width="12"/>
+  <path d="M121 129c63-24 155 12 213 84 21 26 34 52 39 75-72 7-154-28-205-88-31-37-48-75-47-71z" fill="url(#dish)" stroke="#0b2c55" stroke-width="8"/>
+  <path d="M150 158c44 15 95 53 139 103" fill="none" stroke="#0b2c55" stroke-width="8" stroke-linecap="round"/>
+  <path d="M224 309l-58 104M224 309l48 104" fill="none" stroke="#b9cbe0" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="224" cy="309" r="21" fill="#0b2c55" stroke="#d8e6f3" stroke-width="8"/>
+  <path d="M289 260l53-81" fill="none" stroke="#e8f2fb" stroke-width="11" stroke-linecap="round"/>
+  <g transform="translate(341 170) rotate(-18)">
+    <rect x="-17" y="-18" width="55" height="36" rx="14" fill="#e8f2fb" stroke="#0b2c55" stroke-width="7"/>
+    <rect x="13" y="-17" width="14" height="34" fill="url(#cyan)"/>
+  </g>
+  <path d="M351 116c28 8 50 29 58 56" fill="none" stroke="#12e7ff" stroke-width="13" stroke-linecap="round"/>
+  <path d="M365 79c49 13 87 49 101 97" fill="none" stroke="#12e7ff" stroke-width="13" stroke-linecap="round"/>
+  <g transform="translate(382 270)" fill="none" stroke-linecap="round">
+    <circle r="44" stroke="#13e6ff" stroke-width="9" stroke-dasharray="47 22"/>
+    <path d="M0-60v25M0 35v25M-60 0h25M35 0h25" stroke="#fff" stroke-width="8"/>
+    <circle r="8" fill="#13e6ff" stroke="none"/>
+  </g>
+  <rect x="39" y="377" width="434" height="102" rx="30" fill="#071a33" stroke="url(#cyan)" stroke-width="8"/>
+  <text x="256" y="423" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="38" font-weight="800" fill="#fff">Satellite Installer</text>
+  <text x="256" y="463" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="42" font-weight="900" fill="#12e7ff">Pro</text>
+</svg>
