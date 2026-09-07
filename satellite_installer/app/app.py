@@ -1,17 +1,58 @@
 from flask import Flask, render_template, request, jsonify
-from math import radians, degrees, atan2, cos, sin, sqrt, atan, ceil
+from math import radians, degrees, atan2, cos, sin, sqrt, atan
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+import json
 
 app = Flask(__name__)
 
 SATELLITES = {
-    "astra19": {"name": "Astra 19.2°E", "lon": 19.2, "dish": 60, "tp": "11347 V 22000", "note": "Transponder di riferimento: verificare sempre sullo strumento prima del puntamento definitivo."},
-    "hotbird13": {"name": "Hotbird 13.0°E", "lon": 13.0, "dish": 60, "tp": "10719 V 27500", "note": "Transponder di riferimento: verificare sempre sullo strumento prima del puntamento definitivo."},
-    "thor08w": {"name": "Thor 0.8°W", "lon": -0.8, "dish": 80, "tp": "11823 H 30000", "note": "Riferimento utile per Digi/Thor; confermare il transponder attivo sul misuratore."},
-    "eutelsat5w": {"name": "Eutelsat 5°W", "lon": -5.0, "dish": 80, "tp": "11096 V 29950", "note": "Riferimento iniziale; verificare il transponder attivo prima del collaudo."},
+    "astra19": {
+        "name": "Astra 19.2°E", "lon": 19.2, "dish": 60,
+        "tp": "11347 V 22000", "fec": "2/3", "system": "DVB-S2 8PSK",
+        "channels": ["3sat HD", "KiKA HD", "ZDFinfo HD"],
+        "note": "Transponder ZDF Vision, ottimo come riferimento in Europa centrale."
+    },
+    "hotbird13": {
+        "name": "Hotbird 13.0°E", "lon": 13.0, "dish": 60,
+        "tp": "10719 V 27500", "fec": "5/6", "system": "DVB-S2 8PSK",
+        "channels": ["TVP Info HD"],
+        "note": "Transponder Canal+ Polska. La composizione può cambiare nel tempo."
+    },
+    "eutelsat16": {
+        "name": "Eutelsat 16A 16.0°E", "lon": 16.0, "dish": 80,
+        "tp": "11283 V 30000", "fec": "2/3", "system": "DVB-S2 8PSK",
+        "channels": ["FilmBox+ Hits Adria HD", "Dizi HD"],
+        "note": "Riferimento utile per impianti dell'area balcanica."
+    },
+    "astra28": {
+        "name": "Astra 28.2°E", "lon": 28.2, "dish": 80,
+        "tp": "11023 H 23000", "fec": "3/4", "system": "DVB-S2 8PSK",
+        "channels": ["BBC One Scotland HD", "BBC One Wales HD", "BBC News UK"],
+        "note": "Beam UK: in Europa continentale può richiedere una parabola molto più grande."
+    },
+    "turksat42": {
+        "name": "Türksat 42.0°E", "lon": 42.0, "dish": 80,
+        "tp": "12380 V 27500", "fec": "3/4", "system": "DVB-S",
+        "channels": ["TGRT Haber"],
+        "note": "Transponder sul beam West."
+    },
+    "thor08w": {
+        "name": "Thor 0.8°W", "lon": -0.8, "dish": 80,
+        "tp": "11823 H 30000", "fec": "5/6", "system": "DVB-S2 8PSK",
+        "channels": ["TV 2 Hungary HD", "M1 Hungary HD", "Digi Sport 1 HD", "Digi Sport 2 HD", "Pro TV HD", "TVR Info", "TVR Cultural"],
+        "note": "Transponder Digi România. Molti servizi sono criptati e richiedono abbonamento."
+    },
+    "eutelsat5w": {
+        "name": "Eutelsat 5 West B 5.0°W", "lon": -5.0, "dish": 80,
+        "tp": "11096 V 29950", "fec": "3/4", "system": "DVB-S2 8PSK",
+        "channels": ["TF1 HD", "M6 HD", "ARTE Français HD", "6ter HD", "KTO"],
+        "note": "Transponder Fransat; molti canali sono criptati Viaccess."
+    }
 }
 
 SYSTEMS = {
-    "auto": "Scelta automatica professionale",
+    "auto": "Automatico (consigliato)",
     "single": "LNB universale Single",
     "twin": "LNB universale Twin",
     "quad": "LNB universale Quad",
@@ -32,119 +73,133 @@ def look_angles(lat, lon, sat_lon):
     skew = degrees(atan2(sin(dl), sin(phi)))
     return round(azimuth, 1), round(elevation, 1), round(skew, 1)
 
-def auto_system(tuners, sat_count):
-    if sat_count == 1:
-        if tuners <= 1: return "single"
-        if tuners <= 2: return "twin"
-        if tuners <= 4: return "quad"
-        if tuners <= 8: return "octo"
-        return "jess"
-    if tuners <= 4 and sat_count <= 4:
+def recommend_system(receivers, sat_count):
+    if sat_count > 2 or receivers > 8:
+        return "quattro"
+    if receivers <= 1 and sat_count == 1:
+        return "single"
+    if receivers <= 2 and sat_count == 1:
+        return "twin"
+    if receivers <= 4 and sat_count == 1:
         return "quad"
+    if receivers <= 8 and sat_count == 1:
+        return "octo"
     return "quattro"
 
-def design_system(system, tuners, satellites):
-    sat_count = len(satellites)
-    if system == "auto":
-        system = auto_system(tuners, sat_count)
-
+def build_layout(system, receivers, sat_count):
     components = []
-    cabling = []
-    warnings = []
-    outputs = {"single":1, "twin":2, "quad":4, "octo":8}
-
-    if system in outputs:
-        cap = outputs[system]
-        components.append(f"{sat_count} × {SYSTEMS[system]}")
-        if sat_count == 1:
-            cabling.append(f"{min(tuners, cap)} cavo/i coassiale/i diretto/i dall'LNB ai tuner")
-            if tuners > cap:
-                warnings.append(f"Questo LNB ha solo {cap} uscita/e indipendente/i: servono più uscite o un sistema multiswitch/dCSS.")
-        else:
-            components.append(f"Commutazione DiSEqC per {sat_count} satelliti su ogni linea tuner")
-            cabling.append(f"Per ogni tuner: {sat_count} cavi dagli LNB al relativo commutatore DiSEqC, poi 1 cavo al tuner")
-            if tuners > cap:
-                warnings.append(f"Con {SYSTEMS[system]} puoi servire al massimo {cap} tuner indipendenti per satellite.")
-    elif system == "unicable":
-        components += [f"{sat_count} × LNB/Sistema SCR EN50494 compatibile", "Splitter SAT DC-pass compatibili Unicable"]
-        cabling.append("1 dorsale coassiale Unicable, derivata con splitter compatibili verso i ricevitori")
-        warnings.append("Verificare il numero di User Band disponibili e assegnare una frequenza UB diversa a ogni tuner.")
-        if sat_count > 2:
-            warnings.append("Per più satelliti, verificare esplicitamente compatibilità SCR + commutazione satelliti del multiswitch/ricevitore.")
-    elif system == "jess":
-        components += [f"Sistema dCSS/JESS EN50607 per {sat_count} satellite/i", "Splitter SAT DC-pass 5–2400 MHz compatibili dCSS"]
-        cabling.append("1 dorsale coassiale principale; più tuner condividono il cavo usando User Band separate")
-        warnings.append("Configurare EN50607 e User Band/frequenze secondo il modello reale del multiswitch/LNB.")
+    wiring = []
+    if system == "single":
+        components.append(f"{sat_count} × LNB Single")
+        wiring.append("1 cavo coassiale per satellite verso il ricevitore/DiSEqC")
+    elif system == "twin":
+        components.append(f"{sat_count} × LNB Twin")
+        wiring.append("2 uscite indipendenti per ogni LNB")
+    elif system == "quad":
+        components.append(f"{sat_count} × LNB Quad")
+        wiring.append("Fino a 4 linee indipendenti per ogni LNB")
+    elif system == "octo":
+        components.append(f"{sat_count} × LNB Octo")
+        wiring.append("Fino a 8 linee indipendenti per ogni LNB")
     elif system == "quattro":
-        inputs = sat_count * 4
-        ms_out = max(4, int(ceil(tuners / 4.0) * 4))
-        components += [f"{sat_count} × LNB Quattro", f"Multiswitch almeno {inputs} ingressi SAT (+ terrestre se necessario) e {ms_out} uscite"]
-        cabling.append(f"4 cavi per satellite LNB→multiswitch: VL, VH, HL, HH ({inputs} cavi SAT totali in ingresso)")
-        cabling.append(f"1 cavo indipendente dal multiswitch a ciascun tuner/utenza ({tuners} linea/e)")
+        components.append(f"{sat_count} × LNB Quattro")
+        components.append(f"1 × multiswitch con almeno {sat_count * 4} ingressi SAT e {receivers} uscite")
+        wiring.append(f"{sat_count * 4} cavi LNB→multiswitch: VL / VH / HL / HH per ciascun satellite")
+        wiring.append(f"{receivers} linee indipendenti multiswitch→tuner")
     elif system == "wideband":
-        inputs = sat_count * 2
-        components += [f"{sat_count} × LNB Wideband", f"Multiswitch Wideband/dCSS con almeno {inputs} ingressi Wideband"]
-        cabling.append(f"2 cavi per satellite LNB→multiswitch: V e H ({inputs} cavi SAT totali in ingresso)")
-        cabling.append("Dal multiswitch: uscite legacy oppure dCSS/Unicable in base ai ricevitori")
-        warnings.append("Wideband non è compatibile con un normale multiswitch Quattro: il multiswitch deve dichiarare ingressi Wideband.")
-
-    return system, components, cabling, warnings
+        components.append(f"{sat_count} × LNB Wideband")
+        components.append(f"1 × multiswitch Wideband/dCSS compatibile con almeno {sat_count * 2} ingressi SAT")
+        wiring.append(f"{sat_count * 2} cavi LNB→multiswitch: H + V per ciascun satellite")
+    elif system in ("unicable", "jess"):
+        components.append(f"{sat_count} × sorgente compatibile {SYSTEMS[system]}")
+        wiring.append("Distribuzione su singolo cavo con user band separate per tuner")
+    if sat_count > 1 and system in ("single", "twin", "quad", "octo"):
+        components.append("Commutatore DiSEqC adeguato al numero di satelliti")
+        wiring.append("Collegare ogni LNB a un ingresso DiSEqC e l'uscita al tuner")
+    return components, wiring
 
 @app.route("/")
 def index():
     return render_template("index.html", satellites=SATELLITES, systems=SYSTEMS)
+
+@app.route("/api/geocode", methods=["POST"])
+def geocode():
+    d = request.get_json(force=True)
+    city = (d.get("city") or "").strip()
+    if not city:
+        return jsonify({"error": "Inserisci il nome della città"}), 400
+    try:
+        params = urlencode({"q": city, "format": "jsonv2", "limit": 5, "addressdetails": 1})
+        req = Request(
+            "https://nominatim.openstreetmap.org/search?" + params,
+            headers={"User-Agent": "SatelliteInstallerPro/0.3.0 (Home Assistant add-on)"}
+        )
+        with urlopen(req, timeout=8) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        results = [{"name": x.get("display_name", city), "lat": float(x["lat"]), "lon": float(x["lon"])} for x in data[:5]]
+        return jsonify({"results": results})
+    except Exception as e:
+        return jsonify({"error": "Ricerca città non disponibile. Puoi inserire manualmente latitudine e longitudine.", "detail": str(e)}), 502
 
 @app.route("/api/calc", methods=["POST"])
 def calc():
     d = request.get_json(force=True)
     lat = float(d["lat"])
     lon = float(d["lon"])
-    sat_keys = d.get("satellites") or [d.get("satellite", "astra19")]
-    sat_keys = [k for k in sat_keys if k in SATELLITES]
-    if not sat_keys:
-        return jsonify({"error": "Seleziona almeno un satellite"}), 400
+    satellite_ids = d.get("satellites") or [d.get("satellite", "astra19")]
+    satellite_ids = [s for s in satellite_ids if s in SATELLITES]
+    if not satellite_ids:
+        satellite_ids = ["astra19"]
+    receivers = max(1, int(d.get("receivers", 1)))
+    system = d.get("system", "auto")
+    if system == "auto":
+        system = recommend_system(receivers, len(satellite_ids))
 
-    tuners = max(1, int(d.get("receivers", 1)))
-    requested_system = d.get("system", "auto")
-    sats = [SATELLITES[k] for k in sat_keys]
-    primary = sats[0]
-    az, el, skew = look_angles(lat, lon, primary["lon"])
+    results = []
+    dish = 0
+    sat_lons = []
+    for sid in satellite_ids:
+        sat = SATELLITES[sid]
+        az, el, skew = look_angles(lat, lon, sat["lon"])
+        dish = max(dish, sat["dish"])
+        sat_lons.append(sat["lon"])
+        results.append({
+            "id": sid,
+            "satellite": sat["name"],
+            "azimuth": az,
+            "elevation": el,
+            "skew": skew,
+            "transponder": sat["tp"],
+            "fec": sat["fec"],
+            "dvb_system": sat["system"],
+            "channels": sat["channels"],
+            "tp_note": sat["note"]
+        })
 
-    max_dish = max(s["dish"] for s in sats)
-    orbital_span = max(s["lon"] for s in sats) - min(s["lon"] for s in sats)
-    dish = max_dish
-    if len(sats) > 1:
-        dish = max(80, max_dish + 10)
-        if orbital_span > 10: dish = max(dish, 90)
-        if orbital_span > 20: dish = max(dish, 100)
+    if len(satellite_ids) > 1:
+        spread = max(sat_lons) - min(sat_lons)
+        dish = max(dish + 15, 80)
+        if spread > 12:
+            dish += 10
 
-    system, components, cabling, warnings = design_system(requested_system, tuners, sats)
-    angles = []
-    for s in sats:
-        a, e, sk = look_angles(lat, lon, s["lon"])
-        angles.append({"satellite": s["name"], "azimuth": a, "elevation": e, "skew": sk, "transponder": s["tp"]})
-
-    multifeed_note = None
-    if len(sats) > 1:
-        west = min(sats, key=lambda x: x["lon"])["name"]
-        east = max(sats, key=lambda x: x["lon"])["name"]
-        multifeed_note = f"Escursione orbitale {orbital_span:.1f}°. La posizione fisica destra/sinistra degli LNB dipende dalla vista frontale o da dietro la parabola: usare i valori di puntamento e rifinire ogni fuoco con il misuratore. Satelliti estremi: {west} ↔ {east}."
+    components, wiring = build_layout(system, receivers, len(satellite_ids))
+    warnings = []
+    if len(satellite_ids) > 4:
+        warnings.append("Per più di 4 satelliti valuta multiswitch in cascata o commutazione DiSEqC avanzata.")
+    if any(x["elevation"] <= 0 for x in results):
+        warnings.append("Almeno un satellite risulta sotto l'orizzonte dalla località selezionata.")
+    if receivers > 8 and system in ("single", "twin", "quad", "octo"):
+        warnings.append("Con più di 8 tuner è consigliato passare a multiswitch Quattro/Wideband o dCSS.")
 
     return jsonify({
-        "version": "0.2.0",
-        "primary_satellite": primary["name"],
-        "azimuth": az, "elevation": el, "skew": skew,
+        "location": {"lat": lat, "lon": lon},
+        "satellites": results,
         "dish_min_cm": dish,
         "system_key": system,
         "system": SYSTEMS[system],
-        "tuners": tuners,
-        "satellite_count": len(sats),
-        "angles": angles,
         "components": components,
-        "cabling": cabling,
-        "warnings": warnings,
-        "multifeed_note": multifeed_note
+        "wiring": wiring,
+        "warnings": warnings
     })
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8099)
+app.run(host="0.0.0.0", port=8099)
