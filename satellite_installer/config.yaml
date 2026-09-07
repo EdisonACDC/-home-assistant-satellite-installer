@@ -1,0 +1,22 @@
+name: Satellite Installer Pro
+version: "0.1.0"
+slug: satellite_installer_pro
+description: Calcolo, configurazione e puntamento professionale di impianti satellitari
+url: https://github.com/EdisonACDC/-home-assistant-satellite-installer
+arch:
+  - amd64
+  - aarch64
+  - armv7
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:satellite-uplink
+panel_title: Satellite Installer
+init: false
+ports:
+  8099/tcp: null
+options:
+  default_language: it
+schema:
+  default_language: list(it|de)
